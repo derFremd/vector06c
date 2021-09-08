@@ -1,4 +1,3 @@
-
 	; ***************************	
 	; Процедура clear_scr - очистка экрана
 	; Используется маска запрещенных плоскостей по адресу (scr_mask)
@@ -82,6 +81,7 @@ set_cur:
 	; Процедура print_str - печать строки на экране. конец строки $0 
 	; входные параметры: de - адрес начала строки 
 	; выходные параметры: de - адрес конца строки строки 
+	; TODO 
 	; Служебные символы:
 	; $0d - перевод строки (1 байт),
 	; $10 - изменить цвет (2 байта),
@@ -166,13 +166,13 @@ set_planes:
 	ret
 
 cur_char_pos:
-	db 0,0		; хранится текущее положение курсора y,x (0-31)
+	db 0,0			; хранится текущее положение курсора y,x (0-31)
 
 tab_length:
 	db 4			; длина табуляции (0-255)
 
 char_color:			; текущий цвет символов и фона (символ + 16 * фон)
-	db 15+1*16
+	db %01010011
 
 saved_sp:			; временное хранение значения регистра SP
 	dw $0000				
@@ -219,7 +219,7 @@ print_char:
 _print_char_repeat:
 	ld a,(scr_mask)					; маска запрета плоскостей	
 	and c
-	jp z,_print_char_shift_mask		; ничего не делать
+	jp z,_print_char_next_plane		; ничего не делать
 	; ---------------------------
 	ld a,(char_color)				; загрузить текущий цвет
 	ld d,a							; дополнительно сохраняем в регистре D
@@ -233,7 +233,7 @@ REPT 7
 	inc l
 ENDM
 	ld (hl),a
-	jp _print_char_new_plain
+	jp _print_char_restore_l
 	; ---------------------------
 _print_char_is_bg:
 	and $f0							; если ли фон?
@@ -255,7 +255,7 @@ ENDM
 	; ---------------------------
 	; фон есть, если ли изображение одновременно с фоном?
 _print_char_is_color:
-	ld a,d				; загрузить сохраненный в D цвет
+	ld a,d						; загрузить сохраненный в D цвет
 	and $0f
 	jp z,_print_char_inv_char	; если нет цвета, только фон, переход
 	; ---------------------------	
@@ -267,7 +267,7 @@ REPT 7
 	inc l
 ENDM
 	ld (hl),a
-	jp _print_char_new_plain
+	jp _print_char_restore_l
 	; ---------------------------	
 	; выводить инверсный вариант символа (8 байт)
 _print_char_inv_char:
@@ -299,10 +299,11 @@ _print_char_rest_sp:
 	ex de,hl
 	; ---------------------------
 	; восстановить L и сменить плоскость в H
-_print_char_new_plain:			
+_print_char_restore_l:		
 	ld a,l					
 	sub 7
 	ld l,a
+_print_char_next_plane:	
 	ld a,h					
 	sub $20
 	ld h,a
@@ -320,86 +321,6 @@ _print_char_shift_mask:
 	pop de
 	pop hl
 	ret
-
-	; *****************************
-	; Процедура print_char - вывод символа 8x8 точек в заданную часть экрана
-	; Адрес начала символа (scr_addr_char: dw)
-	; Маска запрета плоскостей (scr_mask: db)
-	; c - код символа 
-	; b - код цвета + 8 * код фона
-	; *****************************
-__print_char:
-	push bc
-	push de
-	push hl
-	
-	; вычисляем начало символа в таблице шрифтов
-	sub $20				; вычесть 32
-	ld l,a
-	ld h,$00				
-	add hl,hl			; умножить на 8
-	add hl,hl
-	add hl,hl
-	ld de,font_table
-	add hl,de			; адрес в таблице символов
-	ex de,hl			; в de
-	ld hl,(scr_addr_char)	; сохраняемадрес на экране
-
-__print_char_begin:	
-	ld c, %00010001		; маска выбора плоскости (биты 7-4 фон, биты 3-0 цвет символа)
-
-__print_char_0:
-	ld a,(scr_mask)		; маска запрета плоскостей	
-	and c
-	jp z,__print_char_4		; при запрете идем на сдвиг маски цвета
-
-	ld a,b
-	and c				; установлен ли цвет символа и/или фона?
-	jp z,__print_char_3		; нет ни фона, ни цвета (уже a=0)
-	and $f0				
-	jp z,__print_char_2		; переход если нет фона
-	ld a,b
-	and c
-	and $0f				; есть ли цвет символа
-	jp z,__print_char_1
-	ld (hl),$ff
-	jp __print_char_4
-
-__print_char_1:
-	ld a,(de)
-	cpl					; инвертировать 
-	jp __print_char_3
-
-__print_char_2:
-	ld a,(de)			; часть символа из таблицы
-
-__print_char_3:
-	ld (hl),a			; записать байт на экран
-
-__print_char_4:   
-	ld a,c				; сдвигаем маску цвета и фона
-	rlca
-	ld c,a
-	jp c,__print_char_5		; маска сдвинута 4 раза? 
-	ld a,h				; да, меняем плоскость
-	sub $20
-	ld h,a
-	jp __print_char_0		
-__print_char_5:
-	inc de				; следующая строка символа
-	ld a,(scr_addr_char+1)	; восстанавливаем h
-	ld h,a
-
-	inc l				; следующая строка экрана вверх
-	ld a,l
-	and $07				; было больше чем 8 строк экрана?
-	jp nz,__print_char_begin
-
-	pop hl
-	pop de
-	pop bc
-	ret
-
 
 	; ******************************
 	; Процедура palette_on - включить палитру
