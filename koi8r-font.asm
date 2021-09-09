@@ -1,7 +1,7 @@
 	; ********************************************	
 	; Cyrillic font 8x8 KOI8-R
 	; @autor Sergey S. (der.fremd@gmail.com)
- 	; @version 1.1
+ 	; @version 1.1 09.09.2021
 	; ********************************************
 
 font_table:
