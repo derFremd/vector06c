@@ -1,3 +1,10 @@
+	; ********************************************	
+	; Various subroutines-utilities in the assembly 
+	; language for the Vector 06c personal computer.
+	; @autor Sergey S. (der.fremd@gmail.com)
+ 	; @version 1.0
+	; ********************************************
+
 	; ***************************	
 	; Процедура clear_scr - очистка экрана
 	; Используется маска запрещенных плоскостей по адресу (scr_mask)
@@ -122,10 +129,10 @@ set_cur:
 	; Служебные символы:
 	; $10 - изменить цвет (2 байта),
 	; $11 - изменить фон (2 байта)
-	; TODO 
-	; $08 - забой (1 байт)
-	; $0d - перевод строки (1 байт),	
 	; $16 - новое положение (3 байта)
+	; $08 - забой (1 байт)
+	; $0A - перевод строки (1 байт)
+	; TODO 
 	; $17 - табуляция (1 байт), см. tab_length:
 	; ***************************	
 print_str:
@@ -148,16 +155,18 @@ _print_str_repeat:
 _print_str_no_term:
 	cp $20							; символ с кодом меньше $20?
 	jp c,_print_str_spec_char		; да
+_print_str_one_char:
 	call print_char					; печать обычного символа
 	; -----------------------	
 	inc h							; курсор вправо
 	jp nz,_print_str_repeat			; повтор, если не вышли за границу
 	ld h,$e0						; вышли, восстановить H
-	ld a,l							; спускаемся ниже на 8 байт	
+	ld a,l							; спускаемся ниже на 8 пикселей	
 	sub $08							
 	ld l,a
 	jp _print_str_repeat
 	; -----------------------	
+	; проверяем возможные служебные символы
 _print_str_spec_char:
 	cp $10						
 	jp z,_print_str_new_fg			
@@ -165,28 +174,61 @@ _print_str_spec_char:
 	jp z,_print_str_new_bg		
 	cp $16
 	jp z,_print_str_at_cur
-	jp _print_str_repeat
+	cp $08
+	jp z,_print_str_backspace
+	cp $0a
+	jp z,_print_str_cr
+	
+	ld a,$7f						; нет такого кода, печатаем символ $7f
+	jp _print_str_one_char
 	; -----------------------	
+	; установка цвет символа (код $10)
 _print_str_new_fg:
-	ld a,(de)						; установка цвет символа (код $10)
+	ld a,(de)						
 	inc de
 	call set_color_char
 	jp _print_str_repeat
 	; -----------------------	
+	; установка цвет фона символа (код $11)
 _print_str_new_bg:
-	ld a,(de)						; установка цвет фона символа (код $11)
+	ld a,(de)						
 	inc de
 	call set_color_bg
 	jp _print_str_repeat
 	; -----------------------
+	; новая координата (CUR x,y)
 _print_str_at_cur:
-	ex de,hl						; новая координата
+	ex de,hl						
 	ld d,(hl)
 	inc hl
 	ld e,(hl)
 	inc hl
 	ex de,hl
 	jp _print_str_cur_to_scr_addr
+	; -----------------------
+	; символ backspace (BS)
+_print_str_backspace:	
+	dec h
+	ld a,$df
+	cp h
+	jp nz,_print_str_bs_char
+	ld h,$ff
+	ld a,l							; поднимаемся выше на 8 пикселей	
+	add a,$08							
+	ld l,a	
+_print_str_bs_char:	
+	ld a,$20						; напечатать пробел
+	call print_char
+	jp _print_str_repeat
+	; -----------------------
+	; перевод строки (LF)
+_print_str_cr:
+	ld h,$e0
+	ld a,l							; спускаемся ниже на 8 пикселей	
+	sub $08							
+	ld l,a
+	jp _print_str_repeat		
+
 
 	; ***************************
 	; Процедура char_coord_to_scr_addr переводит коодинаты
