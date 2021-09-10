@@ -119,19 +119,20 @@ set_cur:
 	; Процедура print_str - печать строки на экране. конец строки $0 
 	; входные параметры: de - адрес начала строки 
 	; выходные параметры: de - адрес конца строки строки 
-	; TODO 
 	; Служебные символы:
-	; $08 - забой (1 байт)
-	; $0d - перевод строки (1 байт),
 	; $10 - изменить цвет (2 байта),
 	; $11 - изменить фон (2 байта)
+	; TODO 
+	; $08 - забой (1 байт)
+	; $0d - перевод строки (1 байт),	
 	; $16 - новое положение (3 байта)
-	; $17 - табуляция (1 байта), см. tab_length:
+	; $17 - табуляция (1 байт), см. tab_length:
 	; ***************************	
 print_str:
 	push hl
-
+	; -----------------------
 	ld hl,(cur_char_pos) 			; загрузить текущую координату
+_print_str_cur_to_scr_addr:	
 	call char_coord_to_scr_addr		; конвертировать в адрес на экране
 	; -----------------------
 _print_str_repeat:	
@@ -161,7 +162,9 @@ _print_str_spec_char:
 	cp $10						
 	jp z,_print_str_new_fg			
 	cp $11						
-	jp z,_print_str_new_bg			
+	jp z,_print_str_new_bg		
+	cp $16
+	jp z,_print_str_at_cur
 	jp _print_str_repeat
 	; -----------------------	
 _print_str_new_fg:
@@ -176,7 +179,14 @@ _print_str_new_bg:
 	call set_color_bg
 	jp _print_str_repeat
 	; -----------------------
-
+_print_str_at_cur:
+	ex de,hl						; новая координата
+	ld d,(hl)
+	inc hl
+	ld e,(hl)
+	inc hl
+	ex de,hl
+	jp _print_str_cur_to_scr_addr
 
 	; ***************************
 	; Процедура char_coord_to_scr_addr переводит коодинаты
