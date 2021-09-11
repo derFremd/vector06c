@@ -132,11 +132,14 @@ set_cur:
 	; $16 - новое положение (3 байта)
 	; $08 - забой (1 байт)
 	; $0A - перевод строки (1 байт)
+	; $0D - возврат коретки (1 байт)
+	; $09 - табуляция (1 байт), см. tab_length:
 	; TODO 
-	; $17 - табуляция (1 байт), см. tab_length:
+	; 
 	; ***************************	
 print_str:
 	push hl
+	push bc
 	; -----------------------
 	ld hl,(cur_char_pos) 			; загрузить текущую координату
 _print_str_cur_to_scr_addr:	
@@ -149,6 +152,7 @@ _print_str_repeat:
 	jp nz,_print_str_no_term		; нет, это не конец строки
 	call scr_addr_to_char_coord		; адрес экрана в координату
 	ld (cur_char_pos),hl			; сохранить 
+	pop bc
 	pop hl
 	ret								; выход
 	; -----------------------
@@ -157,13 +161,7 @@ _print_str_no_term:
 	jp c,_print_str_spec_char		; да
 _print_str_one_char:
 	call print_char					; печать обычного символа
-	; -----------------------	
-	inc h							; курсор вправо
-	jp nz,_print_str_repeat			; повтор, если не вышли за границу
-	ld h,$e0						; вышли, восстановить H
-	ld a,l							; спускаемся ниже на 8 пикселей	
-	sub $08							
-	ld l,a
+	call print_str_move_cur_right
 	jp _print_str_repeat
 	; -----------------------	
 	; проверяем возможные служебные символы
@@ -177,9 +175,12 @@ _print_str_spec_char:
 	cp $08
 	jp z,_print_str_backspace
 	cp $0a
+	jp z,_print_str_lf
+	cp $0d
 	jp z,_print_str_cr
-	
-	ld a,$7f						; нет такого кода, печатаем символ $7f
+	cp $09
+	jp z,_print_str_tab
+	ld a,63						; нет такого кода, песатаем символ ?
 	jp _print_str_one_char
 	; -----------------------	
 	; установка цвет символа (код $10)
@@ -217,18 +218,65 @@ _print_str_backspace:
 	add a,$08							
 	ld l,a	
 _print_str_bs_char:	
-	ld a,$20						; напечатать пробел
+	ld a,$1f						; напечатать символ $1f
 	call print_char
 	jp _print_str_repeat
 	; -----------------------
 	; перевод строки (LF)
-_print_str_cr:
+_print_str_lf:
 	ld h,$e0
 	ld a,l							; спускаемся ниже на 8 пикселей	
 	sub $08							
 	ld l,a
-	jp _print_str_repeat		
+	jp _print_str_repeat
+	; -----------------------
+	; возврат корретки (LF)
+_print_str_cr:	
+	ld h,$e0	
+	jp _print_str_repeat
+	; -----------------------
+	; символ табуляции (TAB)
+_print_str_tab:
+	;exx
+	ld a,h
+	and $1f
+	ld b,a							; текущая координата по X
+	ld a,(tab_width)				
+	ld c,a							; шаг табуляции
+	xor	a
+_print_str_tab_next_tab:
+	add a,c							; прибавлять пока не станет больше
+	cp b							; чем текущая координата по x
+	jp c,_print_str_tab_next_tab
+	;jp z,_print_str_tab_next_tab 
+	cp $20							; проверка на максимальное значение
+	jp c,_print_str_tab_no_max_val
+	ld a,$20
+_print_str_tab_no_max_val:
+	sub b							; кол-во пробелов до нужной позиции TAB
+	ld b,a
+	ld a,(tab_placeholder)
+	ld c,a							; заполнитель
+_print_str_tab_cycle:
+	dec b
+	jp m,_print_str_repeat
+	ld a,c
+	call print_char		
+	call print_str_move_cur_right
+	jp _print_str_tab_cycle
 
+	; ***************************
+	; Процедура print_str_move_cur_right вычисляет адрес
+	; на экране след. символа с учетом выхода за границу
+	; ***************************
+print_str_move_cur_right:
+	inc h							; курсор вправо
+	ret nz							; выход, если не вышли за границу
+	ld h,$e0						; вышли за границу, восстановить H
+	ld a,l							; спускаемся ниже на 8 пикселей	
+	sub $08							
+	ld l,a	
+	ret
 
 	; ***************************
 	; Процедура char_coord_to_scr_addr переводит коодинаты
@@ -268,6 +316,28 @@ scr_addr_to_char_coord:
 	ret
 
 	; ***************************
+	; Процедура set_tab_width установить ширину табуляции
+	; ***************************
+set_tab_width:
+	cp 32
+	jp c,set_tab_width_ok	
+	ld a,31
+set_tab_width_ok:	
+	ld (tab_width),a
+	ret
+
+	; ***************************
+	; Процедура set_tab_placeholder установить символ табуляции
+	; ***************************
+set_tab_placeholder:
+	cp $20
+	jp nc,set_tab_placeholder_ok
+	ld a,' '
+set_tab_placeholder_ok:	
+	ld (tab_placeholder),a
+	ret
+
+	; ***************************
 	; Процедура set_planes переводит адрес на экране 
 	; в координаты символа.
 	; вход: HL - адрес на экране
@@ -279,25 +349,28 @@ set_planes:
 	ret
 
 cur_char_pos:
-	db 0,0			; хранится текущее положение курсора y,x (0-31)
+	DB 0,0			; хранится текущее положение курсора y,x (0-31)
 
-tab_length:
-	db 4			; длина табуляции (0-255)
+tab_width:
+	DB 4			; длина табуляции (0-31)
+
+tab_placeholder:
+	DEFM " "		; по умолчанию пробел
 
 char_color:			; текущий цвет символов и фона (символ + 16 * фон)
-	db %01010011
+	DB %01010011
 
 saved_sp:			; временное хранение значения регистра SP
-	dw $0000				
+	DW $0000				
 
 cur_char_addr:		; сохраняем адрес текущего символа в таблице шрифта
-	dw $0000
+	DW $0000
 
 scr_addr_char:		; адрес на экране для вывода символа
-	dw $0000 
+	DW $0000 
 
 scr_mask:			; маска запрета экранных плоскостей
-	db %00001111
+	DW %00001111
 
 	; *****************************
 	; Процедура print_char - вывод символа 8 байт (8x8 точек) в заданную часть экрана

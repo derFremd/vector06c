@@ -28,8 +28,6 @@ start_prog:
 	call clear_scr		; очистить экран
 	call palette_on		; включить палитру
 
-	;exx	
-
 	ld a,%00001111		; разрешить доступ ко всем плоскостям (0-4)
 	call set_planes
 
@@ -41,6 +39,15 @@ start_prog:
 
 	ld de,str_test		; строка для вывода
 	call print_str		; печатать
+
+	;exx
+	ld a,27				; новая ширина табуляции
+	call set_tab_width
+	ld a,'.'			; новый заполнитель табуляции
+	call set_tab_placeholder
+
+	ld de,str_test2		; строка для вывода
+	call print_str		; печатать	
 
 loop:
 	nop					; бесконечный цикл
