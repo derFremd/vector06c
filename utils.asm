@@ -1,7 +1,7 @@
 	; ********************************************	
 	; Various subroutines-utilities in the assembly 
 	; language for the Vector 06c personal computer.
-	; @autor Sergey S. (der.fremd@gmail.com)
+	; @author Sergey S. (der.fremd@gmail.com)
  	; @version 1.0
 	; ********************************************
 
