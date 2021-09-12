@@ -8,7 +8,7 @@ if exist utils_demo.com del utils_demo.com
 tools\pasmo --w8080 utils_demo.asm utils_demo.rom utils_demo.txt
 if errorlevel 1 goto Failed
 
-tools\bin2wav.exe utils_demo.rom utils_demo.wav -n knight -m v06c-rom
+tools\bin2wav.exe utils_demo.rom utils_demo.wav -n util-dem -m v06c-rom
 
 echo.
 echo SUCCESS
@@ -22,4 +22,4 @@ echo FAILED
 pause
 
 :Exit
-pause
+timeout /t 5
