@@ -48,9 +48,9 @@ clear_scr_plane:
 	ld bc,0					; заполняем нулями
 	xor a					; счетчик 256 раз (a=0)
 _clear_scr_plane:
-REPT 16
+	REPT 16
 	push bc					; 16T * 16 раз
-ENDM
+	ENDM
 	dec a					; +8T
 	jp nz,_clear_scr_plane	; +12T
 	ex de,hl				; восстанавливает sp из de
@@ -113,6 +113,7 @@ get_color:
 	; входные параметры: h - гориз., l - вертик. координаты
 	; ***************************
 set_cur:
+	push hl
 	ld a,h							; корректируем макс. значения x (0-31)
 	and $1f
 	ld h,a
@@ -120,6 +121,28 @@ set_cur:
 	and $1f
 	ld l,a
 	ld (cur_char_pos),hl			; сохранить текущую координату
+	pop hl
+	ret
+
+	; ***************************
+	; Процедура char_next_pos - сдвигает курсор  на следующую позицию печати.
+	; В случае крайней позиции смещается на начало строки и на позицию вниз
+	; На выхоже в HL новая коодината
+	; ***************************
+char_next_pos:	
+	ld hl,(cur_char_pos)
+	inc h				; увеличить координату x
+	ld a,$1f
+	and h
+	jp nz,_char_next_pos_ok
+	ld h,a
+	inc l				; увеличить координату y
+	ld a,$1f
+	and l
+	jp nz,_char_next_pos_ok
+	ld l,a
+_char_next_pos_ok:
+	ld (cur_char_pos),hl
 	ret
 
 	; ***************************
@@ -238,7 +261,6 @@ _print_str_cr:
 	; -----------------------
 	; символ табуляции (TAB)
 _print_str_tab:
-	;exx
 	ld a,h
 	and $1f
 	ld b,a							; текущая координата по X
@@ -349,7 +371,7 @@ set_tab_width_ok:
 	; Процедура set_tab_placeholder установить символ табуляции
 	; ***************************
 set_tab_placeholder:
-	cp $20
+	cp ' '
 	jp nc,set_tab_placeholder_ok
 	ld a,' '
 set_tab_placeholder_ok:
@@ -371,17 +393,13 @@ set_planes:
 	; Маска запрета плоскостей по адресу (scr_mask)
 	; Текущий цвет по адресу (char_color)
 	; *****************************
-print_char:
+print_char:	
 	push hl
 	push de
 	push bc
-	; ---------------------------
-	ex de,hl				; сохранить SP
-	ld hl,$0000
-	add hl,sp
-	ld (saved_sp),hl
-	; ---------------------------
-	sub $20					; вычесть служебные символы
+	; ---------------------------		
+	sub $20					; вычесть специальные символы
+	ex de,hl
 	ld l,a
 	ld h,$00
 	add hl,hl				; умножить на 8
@@ -389,8 +407,9 @@ print_char:
 	add hl,hl
 	ld bc,font_table
 	add hl,bc
-	ld sp,hl				; в SP адрес символа в таблице шрифта
-	ld (cur_char_addr),hl	; дополнительно сохраняем в ячейку
+	;di
+	;ld sp,hl				; в SP адрес символа в таблице шрифта
+	ld (cur_char_addr),hl	; сохраняем адрес символа 
 	ex de,hl
 	ld c, %00010001			; маска выбора плоскости (биты 7-4 фон, биты 3-0 цвет символа)
 	; ---------------------------
@@ -400,16 +419,16 @@ _print_char_repeat:
 	jp z,_print_char_next_plane		; ничего не делать
 	; ---------------------------
 	ld a,(char_color)				; загрузить текущий цвет
-	ld d,a							; дополнительно сохраняем в регистре D
+	ld b,a							; дополнительно сохраняем в регистре B
 	and c							; есть ли цвет и/или фон?
 	jp nz,_print_char_is_bg			; что-то из этого есть, переход
 	; ---------------------------
 	; нет ни цвета, ни фона. заполняем 8 нулями
 	xor a
-REPT 7
+	REPT 7
 	ld (hl),a
 	inc l
-ENDM
+	ENDM
 	ld (hl),a
 	jp _print_char_restore_l
 	; ---------------------------
@@ -418,22 +437,21 @@ _print_char_is_bg:
 	jp nz,_print_char_is_color		; переход если есть фон
 	; ---------------------------
 	; фона нет, заполняем изображением символа из таблицы (8 байт)
-REPT 3
-	pop de
-	ld (hl),e
+	REPT 7							; записываем 8 байт символа на экран
+	ld a,(de)
+	ld (hl),a
+	inc de
 	inc l
-	ld (hl),d
-	inc l
-ENDM
-	pop de
-	ld (hl),e
-	inc l
-	ld (hl),d
-	jp _print_char_rest_sp
+	ENDM
+	ld a,(de)
+	ld (hl),a
+
+	;jp _print_char_rest_sp
+	jp _print_char_rest_de
 	; ---------------------------
 	; фон есть, если ли изображение одновременно с фоном?
 _print_char_is_color:
-	ld a,d						; загрузить сохраненный в D цвет символа с фоном
+	ld a,b						; загрузить сохраненный в рег. B цвет символа с фоном
 	and $0f						; выделяем только цвет символа
 	and c						; наложить бит цвета для этой плоскости
 	jp z,_print_char_inv_char	; если нет цвета, только фон, переход
@@ -441,40 +459,30 @@ _print_char_is_color:
 	; есть и цвет и фон
 	xor a						; заполняем значением $FF (8 байт)
 	cpl
-REPT 7
+	REPT 7
 	ld (hl),a
 	inc l
-ENDM
+	ENDM
 	ld (hl),a
 	jp _print_char_restore_l
 	; ---------------------------
 	; выводить инверсный вариант символа (8 байт)
 _print_char_inv_char:
-REPT 3
-	pop de
-	ld a,e
+	REPT 7						; записать 8 бай инвертированных символа
+	ld a,(de)
 	cpl
 	ld (hl),a
+	inc	de
 	inc l
-	ld a,d
-	cpl
-	ld (hl),a
-	inc l
-ENDM
-	pop de
-	ld a,e
-	cpl
-	ld (hl),a
-	inc l
-	ld a,d
+	ENDM
+	ld a,(de)
 	cpl
 	ld (hl),a
 	; ---------------------------
-	; восстановить SP на начало символа
-_print_char_rest_sp:
+	; восстановить DE на начало символа	
+_print_char_rest_de:
 	ex de,hl
 	ld hl,(cur_char_addr)
-	ld sp,hl
 	ex de,hl
 	; ---------------------------
 	; восстановить L и сменить плоскость в H
@@ -494,8 +502,6 @@ _print_char_shift_mask:
 	ld c,a
 	jp nc,_print_char_repeat	; повторить, если еще есть плоскости
 	; ---------------------------
-	ld hl,(saved_sp)			; восстановить SP и регистры
-	ld sp,hl
 	pop bc
 	pop de
 	pop hl

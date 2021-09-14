@@ -2,24 +2,24 @@
 
 	jp start_prog
 
+	include "rst7.asm"
 	include "koi8r-font.asm"
 	include "utils.asm"
-	include "rst7.asm"
 	include "strings.asm"
 
 start_prog:
 	di					; запретить прерывания
 	xor a				; выключить квазидиск
 	out ($10),a
-	ld sp,$8000			; инициализировать указатель стека
+	ld sp,$8000-1		; инициализировать указатель стека
 
 	ld a,$C3			; код инструкции jp start_prog
 	ld ($0000),a		; записать по адресу 0
 	ld hl,start_prog
 	ld ($0001),hl
 
-	ld ($0038),a		; записать команду jp int_proc
-	ld hl,int_proc		; по адресу 0x38 (адрес прерывания)
+	ld ($0038),a		; записать команду jp
+	ld hl,interrupt		; по адресу 0x38 (адрес прерывания)
 	ld ($0039),hl
 
 	ei					; разрешить прерывания
@@ -40,7 +40,6 @@ start_prog:
 	ld de,str_test		; строка для вывода
 	call print_str		; печатать
 
-	;exx
 	ld a,27				; новая ширина табуляции
 	call set_tab_width
 	ld a,'.'			; новый заполнитель табуляции
@@ -49,8 +48,30 @@ start_prog:
 	ld de,str_test2		; строка для вывода
 	call print_str		; печатать
 
-loop:
-	nop					; бесконечный цикл
+wait_space:
+	ld a,(keys_line_7)	; ждем пробел
+	and %10000000
+	jp nz,wait_space
+
+	ld hl,$1f1f			; начальная координата
+	call set_cur
+	ld b,0				; цвет
+	ld c,' '
+
+loop:		
+	ld a,b				; меняем цвет
+	call set_color		
+	inc b
+
+	call char_next_pos
+	call char_coord_to_scr_addr
+	ld a,c
+	call print_char		; печать символа
+
+	inc c				; меняем символ
+	jp nz,loop
+	ld c, ' '
+
 	jp loop
 
 	end
