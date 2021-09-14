@@ -7,7 +7,7 @@ interrupt:
 	ld hl,int_counter		; увеличить таймер
 	inc (hl)
 	ld a,$01				; разделяем сбор и обработку клавиш
-	and a,(hl)
+	and (hl)
 	call nz,parse_keys
 
 	ld a,$8a
