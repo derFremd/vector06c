@@ -49,18 +49,20 @@ start_prog:
 	call print_str		; печатать
 
 wait_space:
-	ld a,(keys_line_7)	; ждем пробел
+	ld a,(keys_lines)	; ждем пробел
 	and %10000000
-	jp nz,wait_space
+	jp z,wait_space
+
+	call clear_scr		; очистить экран
 
 	ld hl,$1f1f			; начальная координата
 	call set_cur
 	ld b,0				; цвет
 	ld c,' '
 
-loop:		
+loop:
 	ld a,b				; меняем цвет
-	call set_color		
+	call set_color
 	inc b
 
 	call char_next_pos
@@ -73,5 +75,4 @@ loop:
 	ld c, ' '
 
 	jp loop
-
 	end
