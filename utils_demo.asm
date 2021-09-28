@@ -1,3 +1,11 @@
+	; ********************************************
+	; File: utils_demo.asm
+	; Various subroutines-utilities in the assembly
+	; language for the Vector 06c personal computer.
+	; @author Sergey S. (der.fremd@gmail.com)
+ 	; @version 1.0
+	; ********************************************
+
 	org $100
 
 	jp start_prog
@@ -48,18 +56,13 @@ start_prog:
 	ld de,str_test2		; строка для вывода
 	call print_str		; печатать
 
-wait_space:
-	ld a,(keys_lines)	; ждем пробел
-	and %10000000
-	jp z,wait_space
-
-	call clear_scr		; очистить экран
+	call wait_space_key	; ждем пробел
 
 	ld hl,$1f1f			; начальная координата
 	call set_cur
+
 	ld b,0				; цвет
 	ld c,' '
-
 loop:
 	ld a,b				; меняем цвет
 	call set_color
@@ -75,4 +78,11 @@ loop:
 	ld c, ' '
 
 	jp loop
+
+wait_space_key:
+	ld a,(keys_lines)	; ждем пробел
+	and %10000000
+	jp z,wait_space_key
+	ret
+
 	end

@@ -1,9 +1,17 @@
 	; ********************************************
+	; File: utils.asm
 	; Various subroutines-utilities in the assembly
 	; language for the Vector 06c personal computer.
 	; @author Sergey S. (der.fremd@gmail.com)
  	; @version 1.0
 	; ********************************************
+
+DefPalette		EQU palette_0	; палитра по умолчанию
+
+KEY_BS			EQU $7f			; код символа "забой"
+KEY_LF			EQU $0a			; код символа "перевод строки"
+KEY_CR			EQU $0d			; код символа "перевод коретки"
+KEY_TAB			EQU $09			; код символа "табуляция"
 
 	; ***************************
 	; Процедура clear_scr - очистка экрана
@@ -162,7 +170,7 @@ _char_next_pos_ok:
 	; $10 - изменить цвет (2 байта: $10,$zz),
 	; $11 - изменить фон (2 байта: $11,$zz)
 	; $16 - новое положение (3 байта: $16,$xx,$yy)
-	; $08 - забой (1 байт)
+	; KEY_BS - забой (1 байт)
 	; $0A - перевод строки (1 байт)
 	; $0D - возврат коретки (1 байт)
 	; $09 - табуляция (1 байт), см. tab_length и tab_placeholder:
@@ -203,13 +211,13 @@ _print_str_spec_char:
 	jp z,_print_str_new_bg
 	cp $16
 	jp z,_print_str_at_cur
-	cp $08
+	cp KEY_BS
 	jp z,_print_str_backspace
-	cp $0a
+	cp KEY_LF
 	jp z,_print_str_lf
-	cp $0d
+	cp KEY_CR
 	jp z,_print_str_cr
-	cp $09
+	cp KEY_TAB
 	jp z,_print_str_tab
 	cp $02
 	jp z,_print_str_rep_char
@@ -251,7 +259,7 @@ _print_str_backspace:
 	add a,$08
 	ld l,a
 _print_str_bs_char:
-	ld a,$1f						; напечатать символ $1f
+	ld a,$7f						; напечатать символ $1f
 	call print_char
 	jp _print_str_repeat
 	; -----------------------
@@ -406,7 +414,7 @@ print_char:
 	push de
 	push bc
 	; ---------------------------		
-	sub $20					; вычесть специальные символы
+	sub $20					; вычесть специальные символы (коды 0-31)
 	ex de,hl
 	ld l,a
 	ld h,$00
@@ -452,7 +460,6 @@ _print_char_is_bg:
 	ld a,(de)
 	ld (hl),a
 
-	;jp _print_char_rest_sp
 	jp _print_char_rest_de
 	; ---------------------------
 	; фон есть, если ли изображение одновременно с фоном?
@@ -533,7 +540,7 @@ palette_off:
 
 	; ******************************
 	; Процедура set_palette - программирование палитры.
-    ; Адрес палитры
+	; Адрес палитры
 	; ******************************
 setup_palette:
 	push af
@@ -565,6 +572,14 @@ _setup_palette_repeat:
 	pop af
 	ret
 
+	; ******************************
+	; Процедура keys_to_koi8r - конвертирует код клавиши в символ,
+	; испрользуя кодировку символов KOI8-R.	
+	; ******************************	
+keys_to_koi8r:
+	nop				; TODO 
+	ret
+
 cur_char_pos:
 	DB 0,0			; хранится текущее положение курсора y,x (0-31)
 
@@ -591,7 +606,7 @@ scr_mask:			; маска запрета экранных плоскостей
 
     ; адрес текущей палитры
 palette_cur:
-    DW palette_0
+    DW DefPalette
 
 	;  палитра рабочая
 palette_1:
@@ -601,3 +616,7 @@ palette_1:
 	;  палитра для подготовки экрана
 palette_0:
 	DB 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+	; таблица конвертирования кодов клавиш клавиатуры $00-$1f в коды символов
+keyconv_line0:
+	DB $09,$0a,$0d,$7f,$08,$19,$18,$1a,$0c,$1f,$1b,$00,$01,$02,$03,$04
